@@ -25,14 +25,11 @@ export const authMiddleware = new Elysia({
     if (!roomId || !token) {
       throw new AuthError("Missing roomId or token");
     }
-    const connected = await redist.hget<string[]>(
-      `meta:${roomId}`,
-      "connected"
-    );
+    const connected = await redist.hget<string[]>(`meta:${roomId}`, "connected");
 
     if (!connected?.includes(token)) {
-      throw new AuthError("Invalid Token");
+        throw new AuthError("Invalid Token")
     }
 
-    return { auth: { roomId, token, connected } };
+    return {auth: {roomId, token, connected}}
   });
