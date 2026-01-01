@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🐾 CuteRooms: Unlimited Real-Time Presence
 
-## Getting Started
+A high-performance, type-safe real-time room management application built with the **Bun** ecosystem. Designed to handle unlimited participants using Redis atomic operations.
 
-First, run the development server:
+## Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Framework:** [Next.js 15+](https://nextjs.org/) (App Router)
+- **API Engine:** [ElysiaJS](https://elysiajs.com/) (End-to-end type safety with Eden Treaty)
+- **Database:** [Upstash Redis](https://upstash.com/) (Serverless Redis for global latency)
+- **State Management:** [TanStack Query v5](https://tanstack.com/query/latest)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
+- **ID Generation:** `nanoid`
+
+## Architecture
+
+To support **unlimited people** without race conditions or memory bottlenecks, this app uses a "De-coupled Presence" strategy:
+
+1.  **Room Metadata:** Stored in a Redis `HASH` for O(1) access.
+2.  **Participant Tracking:** Uses Redis `SET` (`SADD`/`SCARD`) to ensure atomic joins and instant member counts, regardless of scale.
+3.  **Type Safety:** The Elysia `App` type is shared with the Next.js frontend via Eden Treaty, providing full autocomplete for all API routes.
+
+
+
+## Setup
+
+### 1. Environment Variables
+Create a `.env` file in the root directory:
+
+```env
+# Upstash Redis Configuration
+UPSTASH_REDIS_REST_URL="your_url_here"
+UPSTASH_REDIS_REST_TOKEN="your_token_here"
+
+# Public URL (for Eden Treaty)
+NEXT_PUBLIC_API_URL="http://localhost:3000"
+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+bun install
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
 
-## Learn More
+### 3. Development
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Start the Next.js dev server
+bun dev
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📂 Project Structure
 
-## Deploy on Vercel
+* `/src/app/api/[[...slugs]]`: ElysiaJS backend routes.
+* `/src/lib/redis.ts`: Upstash Redis client configuration.
+* `/src/components/providers.tsx`: TanStack Query and Theme providers.
+* `/src/app/room/[roomId]`: The real-time room interface.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
+
+```
+
+---
+
+### Implementation Tips for "Unlimited" Scalability
+
+
+1.  **Atomic Joins:** Use `await redist.sadd(`presence:${roomId}`, userId)`. This prevents two people joining at once from breaking the list.
+2.  **Instant Counts:** Don't fetch the list to count it. Use `await redist.scard(`presence:${roomId}`)`. It returns a single integer even if there are 1 million people.
+3.  **Automatic Cleanup:** Always use `await redist.expire(key, 600)` on your presence keys to ensure old rooms don't sit in your database forever.
+
+
+
