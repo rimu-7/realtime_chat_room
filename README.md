@@ -78,6 +78,29 @@ The application uses a **Proxy (Middleware)** pattern to manage room access. Thi
 
 ![System Flow for Joining Room](./public/proxy-for-joining-room.png)
 
+
+# Sendig Messages
+ 1. **Send (Client A → API → Redis)**
+
+- Client A** sends a message via `POST`.
+- Elysia API** validates the session and writes to **Redis**.
+- Redis** stores the message and resets the 
+- TTL (Self-Destruct)** timer.
+
+ 1. **Broadcast (API → Realtime)**
+
+- The API triggers an event in **Upstash Realtime**.
+- The message is instantly pushed to all active room subscribers.
+
+ 3. **Receive (Realtime → Client B)**
+
+- **Client B** receives the update via a persistent **SSE stream**.
+- The UI updates automatically without a page refresh.
+
+
+![sending message from users](./public/messages.png)
+
+
 ## License
 
 MIT
