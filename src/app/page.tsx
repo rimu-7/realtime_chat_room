@@ -1,87 +1,45 @@
 "use client";
 import { client } from "@/lib/client";
 import { useMutation } from "@tanstack/react-query";
-import { nanoid } from "nanoid";
-import { redirect, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useUsername } from "@/hooks/use-username";
 
 export default function Home() {
-  const [username, setUserName] = useState("john");
-  const router = useRouter()
-  const ANIMALS = [
-    "Axolotl",
-    "Red Panda",
-    "Capybara",
-    "Quokka",
-    "Fennec Fox",
-    "Sea Otter",
-    "Chinchilla",
-    "Hedgehog",
-    "Seal Pup",
-    "Alpaca",
-    "Sugar Glider",
-    "Bunny",
-    "Pomeranian",
-    "Koala",
-    "Duckling",
-    "Fawn",
-  ];
+  const router = useRouter();
+  const username = useUsername();
 
-  const STRONG_KEY = "chat_username";
-  const generateUserName = () => {
-    const word = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-    return `anonymous-${word}-${nanoid(10)}`;
-  };
-
-  useEffect(() => {
-    const main = () => {
-      const stored = localStorage.getItem(STRONG_KEY);
-      if (stored) {
-        setUserName(stored);
-        return;
-      }
-      const generated = generateUserName();
-      localStorage.setItem(STRONG_KEY, generated);
-      setUserName(generated);
-    };
-    main();
-  }, []);
-
-  const { mutate: createRoom } = useMutation({
+  const { mutate: createRoom, isPending } = useMutation({
     mutationFn: async () => {
       const res = await client.room.create.post();
-
-      if (res.status === 200) {
-        router.push(`/room/${res.data?.roomId}`)
+      if (res.status === 200 && res.data) {
+        router.push(`/room/${res.data.roomId}`);
       }
     },
   });
+
   return (
-    <main className="flex min-h-screen justify-center items-center p-4">
-      <div className="w-full max-w-xl space-y-8">
-        <div className="w-full tracking-tight text-center">
-          <h1 className="text-green-500 font-bold ">pricate_chat</h1>
-          <p className="text-zinc-500 text-sm ">
-            a private, self-destructing chat room
-          </p>
+    <main className="flex min-h-screen justify-center items-center p-4 bg-zinc-950">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-green-500 font-bold text-2xl tracking-tighter">PRIVATE_CHAT</h1>
+          <p className="text-zinc-500 text-sm">a private, self-destructing chat room</p>
         </div>
-        <div className="border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-md">
-          <div className="space-y-5">
+
+        <div className="border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-md rounded-sm">
+          <div className="space-y-6">
             <div className="space-y-2">
-              <label className="flex items-center text-zinc-500">
-                Your Identity
-              </label>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 p-2 bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono">
-                  {username}
-                </div>
+              <label className="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Your Identity</label>
+              <div className="p-3 bg-zinc-950 border border-zinc-800 text-green-500 font-mono text-sm truncate">
+                {username || "Generating..."}
               </div>
             </div>
+            
             <button
               onClick={() => createRoom()}
-              className="w-full bg-zinc-100  text-black p-3 text0sm hover:bg-zinc-50  transition-colors cursor-pointer disabled:opacity-50"
+              disabled={isPending || !username}
+              className="w-full bg-zinc-100 text-black py-3 font-bold text-sm hover:bg-white transition-all disabled:opacity-50"
             >
-              CREATE SECURE ROOM
+              {isPending ? "SECURING..." : "CREATE SECURE ROOM"}
             </button>
           </div>
         </div>
