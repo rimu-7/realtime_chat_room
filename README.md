@@ -1,4 +1,4 @@
-# 🐾 CuteRooms: Unlimited Real-Time Presence
+# CuteRooms: Unlimited Real-Time Presence
 
 A high-performance, type-safe real-time room management application built with the **Bun** ecosystem. Designed to handle unlimited participants using Redis atomic operations.
 
@@ -51,12 +51,32 @@ bun dev
 
 ```
 
-## 📂 Project Structure
+## Project Structure
 
 * `/src/app/api/[[...slugs]]`: ElysiaJS backend routes.
 * `/src/lib/redis.ts`: Upstash Redis client configuration.
 * `/src/components/providers.tsx`: TanStack Query and Theme providers.
 * `/src/app/room/[roomId]`: The real-time room interface.
+
+
+## The Proxy Gatekeeper
+The application uses a **Proxy (Middleware)** pattern to manage room access. This ensures that every participant is tracked and validated before the page even renders.
+
+### How it works:
+1. **Request Interception:** The Proxy matches all `/room/:id` paths.
+2. **Room Validation:** It performs an edge-call to Redis to verify the room exists.
+3. **Session Management:** - If a user has a valid `x-auth-token`, they are granted access.
+   - New users are automatically assigned a unique `nanoid` via a secure, `httpOnly` cookie.
+4. **Unlimited Presence:** Users are added to a Redis **SET**, allowing the system to scale to thousands of concurrent users without write-lock issues.
+
+
+
+## Architecture
+- **Lobby:** The entry point where rooms are created.
+- **Proxy:** Edge-side logic that validates rooms and handles "unlimited" joining logic.
+- **Room:** The real-time destination for validated users.
+
+![System Flow for Joining Room](./public/proxy-for-joining-room.png)
 
 ## License
 
