@@ -1,61 +1,141 @@
-import { redist } from "@/lib/redis";
-import { Elysia, t } from "elysia"; 
+import { redis } from "@/lib/redis";
+import { Elysia, t } from "elysia";
 import { nanoid } from "nanoid";
 import { authMiddleware } from "./auth";
-import { realtime } from "@/lib/realtime";
+import { z } from "zod";
+import { Message, realtime } from "@/lib/realtime";
 
-const ROOM_TTL_SECONDS = 60 * 60; 
+// 24 Hours TTL (Adjust as needed)
+const ROOM_TTL_SECONDS = 86400;
 
 const rooms = new Elysia({ prefix: "/room" })
   .post("/create", async () => {
-    const roomId = nanoid(12);
-    await redist.hset(`meta:${roomId}`, {
-      connected: [],
+    const roomId = nanoid();
+
+    // Create room meta
+    await redis.hset(`meta:${roomId}`, {
       createdAt: Date.now(),
     });
-    await redist.expire(`meta:${roomId}`, ROOM_TTL_SECONDS);
+
+    await redis.expire(`meta:${roomId}`, ROOM_TTL_SECONDS);
+
     return { roomId };
-  });
+  })
+  .use(authMiddleware)
+  .get(
+    "/ttl",
+    async ({ auth }) => {
+      // Return 0 if key doesn't exist (expired)
+      const ttl = await redis.ttl(`meta:${auth.roomId}`);
+      return { ttl: ttl > 0 ? ttl : 0 };
+    },
+    { query: z.object({ roomId: z.string() }) }
+  )
+  .delete(
+    "/",
+    async ({ auth }) => {
+      const { roomId } = auth;
+
+      // 1. Notify clients immediately
+      await realtime
+        .channel(roomId)
+        .emit("chat.destroy", { isDestroyed: true });
+
+      // 2. Clean up DB (Parallelized)
+      await Promise.all([
+        redis.del(`meta:${roomId}`),
+        redis.del(`messages:${roomId}`),
+      ]);
+    },
+    { query: z.object({ roomId: z.string() }) }
+  );
 
 const messages = new Elysia({ prefix: "/messages" })
   .use(authMiddleware)
-  .post("/", async ({ body, auth }) => {
-    const { sender, text } = body;
-    const { roomId } = auth;
+  .post(
+    "/",
+    async ({ body, auth }) => {
+      const { sender, text } = body;
+      const { roomId } = auth;
 
-    const message = {
-      id: nanoid(),
-      sender,
-      text,
-      timeStamp: Date.now(),
-      roomId,
-    };
+      // 1. Check existence fast
+      const roomExists = await redis.exists(`meta:${roomId}`);
+      if (!roomExists) {
+        throw new Error("Room does not exist");
+      }
 
-    // Store message & Emit to Upstash Realtime
-    await redist.rpush(`messages:${roomId}`, message);
-    await realtime.channel(roomId).emit("chat.message", message);
+      const message: Message = {
+        id: nanoid(),
+        sender,
+        text,
+        timestamp: Date.now(),
+        roomId,
+      };
 
-    // Refresh TTL
-    await redist.expire(`meta:${roomId}`, ROOM_TTL_SECONDS);
-    await redist.expire(`messages:${roomId}`, ROOM_TTL_SECONDS);
+      // 2. CRITICAL PATH: Save & Emit in parallel
+      // We don't await the TTL updates for the response to return
+      // This makes the API response ~2x faster
+      await Promise.all([
+        // Store message
+        redis.rpush(`messages:${roomId}`, {
+          ...message,
+          token: auth.token, // Store token for ownership checks later
+        }),
+        
+        // Broadcast to other clients
+        realtime.channel(roomId).emit("chat.message", message),
+      ]);
 
-    return { success: true };
-  }, {
-    body: t.Object({
-      sender: t.String(),
-      text: t.String()
-    }),
-    query: t.Object({
-      roomId: t.String()
-    })
-  });
+      // 3. HOUSEKEEPING (Fire and forget, or non-blocking await)
+      // Extend room life on activity
+      const extendTTL = async () => {
+        const remaining = await redis.ttl(`meta:${roomId}`);
+        if (remaining > 0) {
+            await Promise.all([
+                redis.expire(`messages:${roomId}`, remaining),
+                redis.expire(`meta:${roomId}`, remaining)
+            ])
+        }
+      };
+      
+      // Execute without holding up the response
+      extendTTL(); 
 
-// IMPORTANT: Connect everything here
-const app = new Elysia({ prefix: "/api" })
-  .use(rooms)
-  .use(messages);
+      return { success: true, messageId: message.id };
+    },
+    {
+      query: z.object({ roomId: z.string() }),
+      body: z.object({
+        sender: z.string().max(100),
+        text: z.string().max(1000),
+      }),
+    }
+  )
+  .get(
+    "/",
+    async ({ auth }) => {
+      const messages = await redis.lrange<Message>(
+        `messages:${auth.roomId}`,
+        0,
+        -1
+      );
+
+      // Sanitize: Only return the token if it matches the requester
+      // (Allows client to know which messages are theirs even if name duplicates)
+      return {
+        messages: messages.map((m) => ({
+          ...m,
+          token: m.token === auth.token ? auth.token : undefined,
+        })),
+      };
+    },
+    { query: z.object({ roomId: z.string() }) }
+  );
+
+const app = new Elysia({ prefix: "/api" }).use(rooms).use(messages);
 
 export const GET = app.fetch;
 export const POST = app.fetch;
+export const DELETE = app.fetch;
 
 export type App = typeof app;

@@ -1,41 +1,33 @@
-import { nanoid } from "nanoid";
-import { useState, useEffect } from "react";
+import { nanoid } from "nanoid"
+import { useEffect, useState } from "react"
 
-const STRONG_KEY = "chat_username";
-const ANIMALS = [
-  "Axolotl",
-  "Red Panda",
-  "Capybara",
-  "Quokka",
-  "Fennec Fox",
-  "Sea Otter",
-  "Chinchilla",
-  "Hedgehog",
-  "Seal Pup",
-  "Alpaca",
-  "Sugar Glider",
-  "Bunny",
-  "Pomeranian",
-  "Koala",
-  "Duckling",
-  "Fawn",
-];
+const ANIMALS = ["wolf", "hawk", "bear", "shark"]
+const STORAGE_KEY = "chat_username"
+
+const generateUsername = () => {
+  const word = ANIMALS[Math.floor(Math.random() * ANIMALS.length)]
+  return `anonymous-${word}-${nanoid(5)}`
+}
 
 export const useUsername = () => {
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState("")
 
   useEffect(() => {
-    const stored = localStorage.getItem(STRONG_KEY);
-    if (stored) {
-      setUsername(stored);
-    } else {
-      const generated = `anon-${
-        ANIMALS[Math.floor(Math.random() * ANIMALS.length)]
-      }-${nanoid(5)}`;
-      localStorage.setItem(STRONG_KEY, generated);
-      setUsername(generated);
-    }
-  }, []);
+    const main = () => {
+      const stored = localStorage.getItem(STORAGE_KEY)
 
-  return username;
-};
+      if (stored) {
+        setUsername(stored)
+        return
+      }
+
+      const generated = generateUsername()
+      localStorage.setItem(STORAGE_KEY, generated)
+      setUsername(generated)
+    }
+
+    main()
+  }, [])
+
+  return { username }
+}

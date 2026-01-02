@@ -1,19 +1,18 @@
-"use server";
 import { NextRequest, NextResponse } from "next/server";
-import { redist } from "./lib/redis";
+import { redis } from "./lib/redis";
 import { nanoid } from "nanoid";
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   const roomMatch = pathname.match(/^\/room\/([^/]+)$/);
-
   if (!roomMatch) return NextResponse.redirect(new URL("/", req.url));
 
   const roomId = roomMatch[1];
 
-  const meta = await redist.hgetall<{ connected: string; createdAt: number }>(
+  const meta = await redis.hgetall<{ connected: string; createdAt: number }>(
     `meta:${roomId}`
   );
+
   if (!meta)
     return NextResponse.redirect(new URL("/?error=room-not-found", req.url));
 
@@ -38,7 +37,7 @@ export async function proxy(req: NextRequest) {
     sameSite: "strict",
   });
 
-  await redist.hset(`meta:${roomId}`, {
+  await redis.hset(`meta:${roomId}`, {
     connected: [...meta.connected, token],
   });
 
