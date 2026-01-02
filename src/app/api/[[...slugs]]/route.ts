@@ -83,7 +83,7 @@ const messages = new Elysia({ prefix: "/messages" })
         }),
         
         // Broadcast to other clients
-        realtime.channel(roomId).emit("chat.message", message),
+        await realtime.channel(roomId).emit("chat.message", message),
       ]);
 
       // 3. HOUSEKEEPING (Fire and forget, or non-blocking await)
